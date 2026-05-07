@@ -69,6 +69,8 @@ docker exec -it dynamic_pricing-redis-1 redis-cli
 
 ## Implementation
 
+<img width="481" height="772" alt="Screenshot 2026-05-07 at 19 43 43" src="https://github.com/user-attachments/assets/2625f476-9c0e-40d4-98fd-f82d3fc139ff" />
+
 Due to the high operation cost of internal service, this intermediary service should be able to store (cache) rates data temporarily instead of fetching a new rate for every request. Cached data should also follow the validity constraint (no longer than 5 minutes).
 
 Considerations:
