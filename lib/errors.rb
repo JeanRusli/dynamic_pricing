@@ -2,7 +2,7 @@ module Errors
   class DynamicPricingError < StandardError
     attr_reader :error_code
 
-    def initialize(message = nil, error_code: nil)
+    def initialize(message = "Internal Server Error", error_code: :internal_server_error)
       super(message)
       @error_code = error_code
     end
@@ -12,7 +12,7 @@ module Errors
     def initialize(message = "Connection Error")
       super(
         message,
-        error_code: 500
+        error_code: :internal_server_error
       )
     end
   end
@@ -21,7 +21,7 @@ module Errors
     def initialize(message = "Lock Timeout Error")
       super(
         message,
-        error_code: 500
+        error_code: :internal_server_error
       )
     end
   end
@@ -30,7 +30,7 @@ module Errors
     def initialize(message = "Not Found Error")
       super(
         message,
-        error_code: 404
+        error_code: :not_found
       )
     end
   end
