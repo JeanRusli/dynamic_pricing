@@ -46,7 +46,7 @@ class BaseApiClient
       if allowed_to_retry?(ctx, attempt_count)
         retry
       else
-        raise e
+        raise
       end
     end
   end
@@ -134,7 +134,8 @@ class BaseApiClient
 
     Rails.logger.info({
       metric: 'api_call',
-      service: ctx[:class_name],
+      service: 'dynamic_pricing',
+      class: ctx[:class_name],
       method: ctx[:method],
       path: ctx[:path],
       status: status,
