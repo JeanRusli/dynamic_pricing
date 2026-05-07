@@ -12,11 +12,8 @@ class Api::V1::PricingController < ApplicationController
 
     service = Api::V1::PricingService.new(period:, hotel:, room:)
     service.run
-    if service.valid?
-      render json: { rate: service.result }
-    else
-      render json: { error: service.errors.join(', ') }, status: :bad_request
-    end
+
+    render json: { rate: service.result }
   end
 
   private
@@ -29,15 +26,15 @@ class Api::V1::PricingController < ApplicationController
 
     # Validate parameter values
     unless VALID_PERIODS.include?(params[:period])
-      return render json: { error: "Invalid period. Must be one of: #{VALID_PERIODS.join(', ')}" }, status: :bad_request
+      return render json: { error: "Invalid period. Must be one of: #{VALID_PERIODS.join(', ')}" }, status: :unprocessable_content
     end
 
     unless VALID_HOTELS.include?(params[:hotel])
-      return render json: { error: "Invalid hotel. Must be one of: #{VALID_HOTELS.join(', ')}" }, status: :bad_request
+      return render json: { error: "Invalid hotel. Must be one of: #{VALID_HOTELS.join(', ')}" }, status: :unprocessable_content
     end
 
     unless VALID_ROOMS.include?(params[:room])
-      return render json: { error: "Invalid room. Must be one of: #{VALID_ROOMS.join(', ')}" }, status: :bad_request
+      return render json: { error: "Invalid room. Must be one of: #{VALID_ROOMS.join(', ')}" }, status: :unprocessable_content
     end
   end
 end

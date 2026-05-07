@@ -1,45 +1,152 @@
 require "test_helper"
 
 class Api::V1::PricingControllerTest < ActionDispatch::IntegrationTest
+  def setup
+    @period = "Summer"
+    @hotel = "FloatingPointResort"
+    @room = "SingletonRoom"
+
+    @info_logs = []
+    @error_logs = []
+  end
+
   test "should get pricing with all parameters" do
-    mock_body = {
-      'rates' => [
-        { 'period' => 'Summer', 'hotel' => 'FloatingPointResort', 'room' => 'SingletonRoom', 'rate' => '15000' }
-      ]
-    }.to_json
+    mock_service = Minitest::Mock.new
+    mock_service.expect(:run, "15000")
+    mock_service.expect(:result, "15000")
 
-    mock_response = OpenStruct.new(success?: true, body: mock_body)
+    logger_mock = Minitest::Mock.new
+    3.times do # 1 default log from Rails, 1 log, 1 metric
+      logger_mock.expect(:info, nil) { |data| @info_logs << data }
+    end
 
-    RateApiClient.stub(:get_rate, mock_response) do
-      get api_v1_pricing_url, params: {
-        period: "Summer",
-        hotel: "FloatingPointResort",
-        room: "SingletonRoom"
-      }
+    Rails.stub(:logger, logger_mock) do
+      Api::V1::PricingService.stub(:new, ->(period:, hotel:, room:) {
+        assert_equal @period, period
+        assert_equal @hotel, hotel
+        assert_equal @room, room
 
-      assert_response :success
-      assert_equal "application/json", @response.media_type
+        mock_service
+      }) do
+        get api_v1_pricing_url, params: {
+          period: @period,
+          hotel: @hotel,
+          room: @room
+        }
 
-      json_response = JSON.parse(@response.body)
-      assert_equal "15000", json_response["rate"]
+        assert_response :success
+        assert_equal "application/json", @response.media_type
+
+        json_response = JSON.parse(@response.body)
+        assert_equal "15000", json_response["rate"]
+      end
+    end
+
+    mock_service.verify
+  end
+
+  test "should return actual error when DynamicPricingError (404) is raised" do
+    mock_service = Minitest::Mock.new
+    def mock_service.run
+      raise Errors::NotFoundError.new("Rate not found.")
+    end
+
+    logger_mock = Minitest::Mock.new
+    2.times do # 1 default log from Rails, 1 metric
+      logger_mock.expect(:info, nil) { |data| @info_logs << data }
+    end
+    logger_mock.expect(:error, nil) { |data| @error_logs << data }
+
+    Rails.stub(:logger, logger_mock) do
+      Api::V1::PricingService.stub(:new, ->(period:, hotel:, room:) {
+        assert_equal @period, period
+        assert_equal @hotel, hotel
+        assert_equal @room, room
+
+        mock_service
+      }) do
+        get api_v1_pricing_url, params: {
+          period: @period,
+          hotel: @hotel,
+          room: @room
+        }
+
+        assert_response :not_found
+        assert_equal "application/json", @response.media_type
+
+        json_response = JSON.parse(@response.body)
+        assert_equal json_response["error"], "Rate not found."
+      end
     end
   end
 
-  test "should return error when rate API fails" do
-    mock_response = OpenStruct.new(success?: false, body: { 'error' => 'Rate not found' })
+  test "should return standardized error when DynamicPricingError (500) is raised" do
+    mock_service = Minitest::Mock.new
+    def mock_service.run
+      raise Errors::LockTimeoutError
+    end
 
-    RateApiClient.stub(:get_rate, mock_response) do
-      get api_v1_pricing_url, params: {
-        period: "Summer",
-        hotel: "FloatingPointResort",
-        room: "SingletonRoom"
-      }
+    logger_mock = Minitest::Mock.new
+    2.times do # 1 default log from Rails, 1 metric
+      logger_mock.expect(:info, nil) { |data| @info_logs << data }
+    end
+    logger_mock.expect(:error, nil) { |data| @error_logs << data }
 
-      assert_response :bad_request
-      assert_equal "application/json", @response.media_type
+    Rails.stub(:logger, logger_mock) do
+      Api::V1::PricingService.stub(:new, ->(period:, hotel:, room:) {
+        assert_equal @period, period
+        assert_equal @hotel, hotel
+        assert_equal @room, room
 
-      json_response = JSON.parse(@response.body)
-      assert_includes json_response["error"], "Rate not found"
+        mock_service
+      }) do
+        get api_v1_pricing_url, params: {
+          period: @period,
+          hotel: @hotel,
+          room: @room
+        }
+
+        assert_response :internal_server_error
+        assert_equal "application/json", @response.media_type
+
+        json_response = JSON.parse(@response.body)
+        assert_equal json_response["error"], "Internal Server Error"
+      end
+    end
+  end
+
+  test "should return standardized error when StandardError is raised" do
+    mock_service = Minitest::Mock.new
+    def mock_service.run
+      raise StandardError, "some error"
+    end
+
+    logger_mock = Minitest::Mock.new
+    2.times do # 1 default log from Rails, 1 metric
+      logger_mock.expect(:info, nil) { |data| @info_logs << data }
+    end
+    logger_mock.expect(:error, nil) { |data| @error_logs << data }
+
+    Rails.stub(:logger, logger_mock) do
+      Api::V1::PricingService.stub(:new, ->(period:, hotel:, room:) {
+        assert_equal @period, period
+        assert_equal @hotel, hotel
+        assert_equal @room, room
+
+        mock_service
+      }) do
+        get api_v1_pricing_url, params: {
+          period: @period,
+          hotel: @hotel,
+          room: @room
+        }
+
+        assert_response :internal_server_error
+        assert_equal "application/json", @response.media_type
+
+        json_response = JSON.parse(@response.body)
+        assert_equal json_response["error"], "Internal Server Error"
+      end
     end
   end
 
@@ -74,7 +181,7 @@ class Api::V1::PricingControllerTest < ActionDispatch::IntegrationTest
       room: "SingletonRoom"
     }
 
-    assert_response :bad_request
+    assert_response :unprocessable_content
     assert_equal "application/json", @response.media_type
 
     json_response = JSON.parse(@response.body)
@@ -88,7 +195,7 @@ class Api::V1::PricingControllerTest < ActionDispatch::IntegrationTest
       room: "SingletonRoom"
     }
 
-    assert_response :bad_request
+    assert_response :unprocessable_content
     assert_equal "application/json", @response.media_type
 
     json_response = JSON.parse(@response.body)
@@ -102,7 +209,7 @@ class Api::V1::PricingControllerTest < ActionDispatch::IntegrationTest
       room: "InvalidRoom"
     }
 
-    assert_response :bad_request
+    assert_response :unprocessable_content
     assert_equal "application/json", @response.media_type
 
     json_response = JSON.parse(@response.body)

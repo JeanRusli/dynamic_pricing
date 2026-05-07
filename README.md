@@ -1,12 +1,4 @@
-<div align="center">
-   <img src="/img/logo.svg?raw=true" width=600 style="background-color:white;">
-</div>
-
 # Backend Engineering Take-Home Assignment: Dynamic Pricing Proxy
-
-Welcome to the Tripla backend engineering take-home assignment\! 🧑‍💻 This exercise is designed to simulate a real-world problem you might encounter as part of our team.
-
-⚠️ **Before you begin**, please review the main [FAQ](/README.md#frequently-asked-questions). It contains important information, **including our specific guidelines on how to submit your solution.**
 
 ## The Challenge
 
@@ -24,34 +16,11 @@ You will start with a Ruby on Rails application that is already integrated with 
 
 ## Core Requirements
 
-1. Review the pricing model's API and its constraints. The model's docker image and documentation are hosted on dockerhub:  [tripladev/rate-api](https://hub.docker.com/r/tripladev/rate-api).
+1. Pricing model's API is limited to **1,000 requests per day**. The pricing model's API, docker image, and documentation are hosted on dockerhub:  [tripladev/rate-api](https://hub.docker.com/r/tripladev/rate-api).
 
-2. Ensure rate validity. A rate fetched from the pricing model is considered valid for 5 minutes. Your service must ensure that any rate it provides for a given set of parameters (`period`, `hotel`, `room`) is no older than this 5-minute window.
+2. Ensure rate validity. A rate fetched from the pricing model is considered **valid for 5 minutes**. Your service must ensure that any rate it provides for a given set of parameters (`period`, `hotel`, `room`) is no older than this 5-minute window.
 
-3. Honor throughput requirements. Your solution must be able to handle at least 10,000 requests per day from our users while using a single API token.
-
-## How We'll Evaluate Your Work
-
-This isn't just about getting the right answer. We're excited to see how you approach the problem. Treat this as you would a production-ready feature.
-
-  * We'll be looking for clean, well-structured, and testable code. Feel free to add dependencies or refactor the existing scaffold as you see fit.
-  * How do you decide on your approach to meeting the performance and cost requirements? Documenting your thought process is a great way to share this.
-  * A reliable service anticipates failure. How does your service behave if the pricing model is slow, or returns an error? Providing descriptive error messages to the end-user is a key part of a robust API.
-  * We want to see how you work around constraints and navigate an existing codebase to deliver a solution.
-
-
-## Minimum Deliverables
-
-1.  A link to your Git repository containing the complete solution.
-2.  Clear instructions in the `README.md` on how to build, test, and run your service.
-
-We highly value seeing your thought process. A great submission will also include documentation (e.g., in the `README.md`) discussing the design choices you made. Consider outlining different approaches you considered, their potential tradeoffs, and a clear rationale for why you chose your final solution.
-
-## Development Environment Setup
-
-The project scaffold is a minimal Ruby on Rails application with a `/api/v1/pricing` endpoint. While you're free to configure your environment as you wish, this repository is pre-configured for a Docker-based workflow that supports live reloading for your convenience.
-
-The provided `Dockerfile` builds a container with all necessary dependencies. Your local code is mounted directly into the container, so any changes you make on your machine will be reflected immediately. Your application will need to communicate with the external pricing model, which also runs in its own Docker container.
+3. Honor throughput requirements. Your solution must be able to handle at least **10,000 requests per day** from our users while using a single API token.
 
 ### Quick Start Guide
 
@@ -76,7 +45,72 @@ docker compose exec interview-dev ./bin/rails test test/controllers/pricing_cont
 
 # Run a specific test by name
 docker compose exec interview-dev ./bin/rails test test/controllers/pricing_controller_test.rb -n test_should_get_pricing_with_all_parameters
+
+# --- 4. Run Console ---
+# Local environment
+cp env.sample .env
+./bin/rails console
+
+# Docker environment
+docker compose exec interview-dev ./bin/rails console
+
+# --- 5. View Logs ---
+docker compose logs -f interview-dev
+
+# --- 6. Access Redis CLI (Docker) ---
+docker exec -it dynamic_pricing-redis-1 redis-cli
 ```
 
+## Assumptions
 
-Good luck, and we look forward to seeing what you build\!
+* Latency is not a primary concern compared to reducing internal API calls.
+* No strict SLA requirements: If the service cannot retrieve fresh data, then better to return error over serving stale / default value.
+* Request parameters for internal API (single / array) don't significantly impact the cost of internal API calls.
+
+## Implementation
+
+Due to the high operation cost of internal service, this intermediary service should be able to store (cache) rates data temporarily instead of fetching a new rate for every request. Cached data should also follow the validity constraint (no longer than 5 minutes).
+
+Considerations:
+
+* Redis:
+Decided to use Redis because it supports TTL, which allows automatic expiration of stored values. It's also accessible across multiple application instances. Lastly, it allows fast read and write which helps reduce processing time.
+
+* Lock:
+Lock is needed to prevent cache stampede when multiple requests attempt to refresh the missing / expired cache data. When lock is already acquired, other concurrent requests would wait until the lock is released or timeout is reached to reduce error response. There's also a flag to mark if values have been recently updated, so other requests won't call the API again after acquiring the lock.
+
+* API Call:
+Instead of calling the internal service for each room rate, the service will retrieve all rates in a single request to reduce the number of API calls. A retry mechanism (for 5xx responses) is also implemented to improve success rate.
+
+* Error Handling:
+The service returns an error response whenever it is unable to provide a valid rate. This includes cases, such as connection failures and empty rates response from the internal service. For any unexpected server errors (5xx), a generic error message is returned to the requester to avoid exposing internal implementation details.
+
+* Monitoring:
+Added logging to help trace issues and see error details. Also added metrics (currently implemented via logs) to track request count, its success / error rate, and cache hits / misses, which could be used for alerting.
+
+## AI Usage
+
+Tools used during development: ChatGPT & Gemini
+
+Usage in workflow:
+
+* Design Discussion
+  * Clarified trade-offs between different approaches.
+  * Researched suitable Ruby gems & functions.
+
+* Development
+  * Assisted in validating syntax and debugging code issues.
+
+* Testing
+  * Generated sample unit tests
+  * Researched ways to validate desired outcomes.
+  * Assisted in creating commands for debugging.
+
+* Documentation
+  * Refine wording.
+
+## Further Improvement
+* Introduce a grace period (stale while revalidate) where the system can still serve the current cache value while rate refresh is started.
+* If internal processing takes a long time, background job can be used to reduce latency.
+* As the number of records / rooms increases, retrieving all data may become inefficient. To improve performance and reduce unnecessary cache usage, rate retrieval could be filtered by hotel, so that only recently accessed rates are cached.
+* Use configuration instead of hard-coded constants for cache TTL to add flexibility.
