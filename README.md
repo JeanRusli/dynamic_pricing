@@ -90,6 +90,8 @@ The service returns an error response whenever it is unable to provide a valid r
 * Monitoring:
 Added logging to help trace issues and see error details. Also added metrics (currently implemented via logs) to track request count, its success / error rate, and cache hits / misses, which could be used for alerting.
 
+Test results: https://docs.google.com/document/d/1kUIJ29udzedj_ikF_wCL10alo58ZdIVa4MAqr8ygAOA/edit?usp=sharing
+
 ## AI Usage
 
 Tools used during development: ChatGPT & Gemini
