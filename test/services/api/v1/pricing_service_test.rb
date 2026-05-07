@@ -268,32 +268,34 @@ class PricingServiceTest < ActiveSupport::TestCase
     original_cache_read = Rails.cache.method(:read)
 
     Rails.logger.stub(:error, ->(msg) { @logs << msg }) do
-      Rails.logger.stub(:info, ->(msg) { @logs << msg }) do
-        RateApiClient.stub(:get_all_rates, nil) do
-          Lock.stub(:with_lock, true) do
-            Rails.cache.stub(:read, lambda { |key, *args|
-              cache_read_calls += 1 if key == @room_cache_key
-              original_cache_read.call(key, *args)
-            }) do
-              assert_raises(Errors::NotFoundError) do
-                result = @service.run
+      Rails.logger.stub(:warn, ->(msg) { @logs << msg }) do
+        Rails.logger.stub(:info, ->(msg) { @logs << msg }) do
+          RateApiClient.stub(:get_all_rates, nil) do
+            Lock.stub(:with_lock, true) do
+              Rails.cache.stub(:read, lambda { |key, *args|
+                cache_read_calls += 1 if key == @room_cache_key
+                original_cache_read.call(key, *args)
+              }) do
+                assert_raises(Errors::NotFoundError) do
+                  result = @service.run
+                end
+
+                assert_equal 3, @logs.length
+
+                parsed_first_log = JSON.parse(@logs.first)
+                assert_equal 'miss', parsed_first_log['status']
+
+                # Room rate cache read twice:
+                # - For initial check
+                # - For trying to retrieve recently updated cache
+                assert_equal 2, cache_read_calls
+
+                assert_equal 1, Rails.cache.read(Api::V1::PricingService::RATE_STATUS_KEY)
+                assert_nil Rails.cache.read('FloatingPointResort:Summer:SingletonRoom:rate')
+                assert_nil Rails.cache.read('FloatingPointResort:Summer:BooleanTwin:rate')
+                assert_nil Rails.cache.read('RecursionRetreat:Summer:SingletonRoom:rate')
+                assert_nil Rails.cache.read('FloatingPointResort:Autumn:SingletonRoom:rate')
               end
-
-              assert_equal 2, @logs.length
-
-              parsed_first_log = JSON.parse(@logs.first)
-              assert_equal 'miss', parsed_first_log['status']
-
-              # Room rate cache read twice:
-              # - For initial check
-              # - For trying to retrieve recently updated cache
-              assert_equal 2, cache_read_calls
-
-              assert_equal 1, Rails.cache.read(Api::V1::PricingService::RATE_STATUS_KEY)
-              assert_nil Rails.cache.read('FloatingPointResort:Summer:SingletonRoom:rate')
-              assert_nil Rails.cache.read('FloatingPointResort:Summer:BooleanTwin:rate')
-              assert_nil Rails.cache.read('RecursionRetreat:Summer:SingletonRoom:rate')
-              assert_nil Rails.cache.read('FloatingPointResort:Autumn:SingletonRoom:rate')
             end
           end
         end
@@ -378,29 +380,31 @@ class PricingServiceTest < ActiveSupport::TestCase
       @logs = []
 
       Rails.logger.stub(:error, ->(msg) { @logs << msg }) do
-        Rails.logger.stub(:info, ->(msg) { @logs << msg }) do
-          RateApiClient.stub(:get_all_rates, @all_rates) do
-            Lock.stub(:with_lock, true) do
-              Rails.cache.stub(:read, lambda { |key, *args|
-                cache_read_calls += 1 if key == @room_cache_key
-                original_cache_read.call(key, *args)
-              }) do
-                assert_raises(Errors::NotFoundError) do
-                  result = @service.run
+        Rails.logger.stub(:warn, ->(msg) { @logs << msg }) do
+          Rails.logger.stub(:info, ->(msg) { @logs << msg }) do
+            RateApiClient.stub(:get_all_rates, @all_rates) do
+              Lock.stub(:with_lock, true) do
+                Rails.cache.stub(:read, lambda { |key, *args|
+                  cache_read_calls += 1 if key == @room_cache_key
+                  original_cache_read.call(key, *args)
+                }) do
+                  assert_raises(Errors::NotFoundError) do
+                    result = @service.run
+                  end
+
+                  assert_equal 3, @logs.length
+
+                  parsed_first_log = JSON.parse(@logs.first)
+                  assert_equal 'miss', parsed_first_log['status']
+
+                  # Room rate cache read twice:
+                  # - For initial check
+                  # - For trying to retrieve recently updated cache
+                  assert_equal 2, cache_read_calls
+
+                  assert_equal 1, Rails.cache.read(Api::V1::PricingService::RATE_STATUS_KEY)
+                  assert_nil Rails.cache.read('FloatingPointResort:Summer:SingletonRoom:rate')
                 end
-
-                assert_equal 2, @logs.length
-
-                parsed_first_log = JSON.parse(@logs.first)
-                assert_equal 'miss', parsed_first_log['status']
-
-                # Room rate cache read twice:
-                # - For initial check
-                # - For trying to retrieve recently updated cache
-                assert_equal 2, cache_read_calls
-
-                assert_equal 1, Rails.cache.read(Api::V1::PricingService::RATE_STATUS_KEY)
-                assert_nil Rails.cache.read('FloatingPointResort:Summer:SingletonRoom:rate')
               end
             end
           end

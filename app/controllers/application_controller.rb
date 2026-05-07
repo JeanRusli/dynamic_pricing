@@ -1,14 +1,21 @@
 class ApplicationController < ActionController::API
+  before_action :set_request_id
+
   around_action :monitor_request
 
   private
+
+  def set_request_id
+    Thread.current[:request_id] = request.request_id
+  end
 
   def default_log_data
     {
       tags: ['dynamic_pricing', 'incoming_request', controller_name],
       method: request.method,
       path: request.path,
-      status: response.status
+      status: response.status,
+      request_id: request.request_id
     }
   end
 

@@ -86,7 +86,8 @@ class BaseApiClient
       method: ctx[:method],
       path: ctx[:path],
       response_code: ctx[:response_code],
-      track_id: ctx[:track_id]
+      track_id: ctx[:track_id],
+      request_id: Thread.current[:request_id]
     }
   end
 

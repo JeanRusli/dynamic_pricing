@@ -52,6 +52,7 @@ class RateApiClient < BaseApiClient
         path: '/pricing',
         response_code: response.code.to_i,
         response_body: response.body,
+        request_id: Thread.current[:request_id]
       }.to_json)
       raise Errors::ConnectionError
     end

@@ -39,7 +39,9 @@ module Api::V1
         tags: ['dynamic_pricing', 'pricing_service'],
         error: e.class.name,
         message: e.message,
-        backtrace: e.backtrace&.take(5)&.join("\n")
+        backtrace: e.backtrace&.take(5)&.join("\n"),
+        track_id: room_rate_key,
+        request_id: Thread.current[:request_id]
       }.to_json)
       raise
     end
@@ -64,15 +66,32 @@ module Api::V1
         rates = RateApiClient.get_all_rates&.dig(:rates) || []
         # TODO: Consider skipping marking status as updated when got invalid response.
         # return if rates.blank?
+        if rates.blank?
+          Rails.logger.warn({
+            level: 'warn',
+            tags: ['dynamic_pricing', 'pricing_service', 'update_all_rates'],
+            message: 'Successfully get all rates but rates is empty.',
+            request_id: Thread.current[:request_id]
+          }.to_json)
+        end
 
         # Update all rates in cache.
         rates.each do |rate|
           rate_num = rate[:rate].to_i
+          key = build_rate_cache_key(hotel: rate[:hotel], period: rate[:period], room: rate[:room])
 
           # Skip cache update if rate is not valid.
-          next if invalid_rate?(rate_num)
+          if invalid_rate?(rate_num)
+            Rails.logger.warn({
+              level: 'warn',
+              tags: ['dynamic_pricing', 'pricing_service', 'update_all_rates'],
+              message: "Successfully get all rates but rate value is invalid: #{rate_num}",
+              track_id: key,
+              request_id: Thread.current[:request_id]
+            }.to_json)
+            next
+          end
 
-          key = build_rate_cache_key(hotel: rate[:hotel], period: rate[:period], room: rate[:room])
           res = Rails.cache.write(key, rate_num, expires_in: RATE_TTL)
 
           if rate[:hotel] == @hotel && rate[:period] == @period && rate[:room] == @room
