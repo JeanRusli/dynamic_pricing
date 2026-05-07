@@ -25,4 +25,13 @@ module Errors
       )
     end
   end
+
+  class NotFoundError < DynamicPricingError
+    def initialize(message = "Not Found Error")
+      super(
+        message,
+        error_code: 404
+      )
+    end
+  end
 end
