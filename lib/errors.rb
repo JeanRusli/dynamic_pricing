@@ -16,4 +16,13 @@ module Errors
       )
     end
   end
+
+  class LockTimeoutError < DynamicPricingError
+    def initialize(message = "Lock Timeout Error")
+      super(
+        message,
+        error_code: 500
+      )
+    end
+  end
 end
